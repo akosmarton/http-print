@@ -1,0 +1,11 @@
+{
+  "API": {
+    "URL":"http://localhost:8080/api",
+    "Key":"eeChoosh6Eidoh2Eisaeng0voib4vung"
+  },
+  "Printer":{
+    "Type":"file",
+    "Destination": "/dev/null"
+  },
+  "PollingInterval":5
+}
