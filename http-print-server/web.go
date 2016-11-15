@@ -13,30 +13,46 @@ const tpl = `<!DOCTYPE html>
 <html>
 	<head>
 		<meta charset="UTF-8">
+		<meta http-equiv="X-UA-Compatible" content="IE=edge">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet">
+		<title>HTTP Print Server</title>
 	</head>
 	<body>
-		<h2>HTTP Print Server</h2>
-		<p>
-			<p>Jobs:</p>
-			<table border=1>
-				<tr>
-					<th>Timestamp</th>
-					<th>ID</th>
-					<th>Content Type</th>
-					<th>Length</th>
-				</tr>
-				{{range .Jobs }}
-				<tr>
-					<td>{{ .Timestamp }}</td>
-					<td>{{ .ID }}</td>
-					<td>{{ .ContentType }}</td>
-					<td>{{ .Len }}</td>
-				</tr>
-				{{end}}
-			</table>
-		</p>
-		<p>Last fetch: {{.LastFetchTime}} {{.LastFetchRemoteAddr}}</p>
+		<div class="container">
+			<nav class="navbar navbar-default">
+				<div class="navbar-header">
+					<a class="navbar-brand" href="/">HTTP Print Server</a>
+				</div>
+			</nav>
+		<div class="panel panel-default">
+			<div class="panel-heading">Jobs</div>
+				<div class="panel-body">
+					<table class="table">
+						<tr>
+							<th>Timestamp</th>
+							<th>ID</th>
+							<th>Content Type</th>
+							<th>Length</th>
+						</tr>
+						{{range .Jobs }}
+						<tr>
+							<td>{{ .Timestamp }}</td>
+							<td>{{ .ID }}</td>
+							<td>{{ .ContentType }}</td>
+							<td>{{ .Len }}</td>
+						</tr>
+						{{end}}
+					</table>
+				</div>
+				<div class="panel-footer">
+					Last fetch: {{.LastFetchTime}} {{.LastFetchRemoteAddr}}
+				</div>
+			</div>
+		</div>
 	</body>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+	<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
 	<script type="text/javascript">
 		setTimeout(function(){
 	   	window.location.reload(1);
