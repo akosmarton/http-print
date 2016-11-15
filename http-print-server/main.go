@@ -7,8 +7,12 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/boltdb/bolt"
+	"github.com/facebookgo/grace/gracehttp"
 	"github.com/gorilla/mux"
 )
 
@@ -51,6 +55,13 @@ func main() {
 	}
 	defer db.Close()
 
+	signalChan := make(chan os.Signal)
+	signal.Notify(signalChan, syscall.SIGUSR2)
+	go func() {
+		<-signalChan
+		db.Close()
+	}()
+
 	db.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists([]byte("jobs"))
 		if err != nil {
@@ -58,8 +69,6 @@ func main() {
 		}
 		return nil
 	})
-
-	printers = make(map[string]interface{})
 
 	r := mux.NewRouter()
 	r.HandleFunc("/", webRoot)
@@ -70,7 +79,7 @@ func main() {
 	s.Handle("/fetch", authMiddleware(http.HandlerFunc(apiFetch)))
 
 	log.Println("HTTP Print Server started")
-	log.Fatal(http.ListenAndServe(config.ListenAddress, r))
+	gracehttp.Serve(&http.Server{Addr: config.ListenAddress, Handler: r})
 }
 
 func loadAppConfig(filename string) (*appConfig, error) {
