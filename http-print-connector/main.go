@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -149,6 +150,10 @@ func pull() (int, string) {
 		io.Copy(pipe, resp.Body)
 		pipe.Close()
 		cmd.Wait()
+	case "tcp":
+		conn, _ := net.Dial("tcp", config.Printer.Destination)
+		io.Copy(conn, resp.Body)
+		conn.Close()
 	}
 
 	return resp.StatusCode, resp.Status
