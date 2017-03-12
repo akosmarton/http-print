@@ -10,6 +10,5 @@ A HTTP printing service developed especially for label printers.
 ## Installation
 
 ```
-go get -u github.com/akosmarton/http-print-server
-go get -u github.com/akosmarton/http-print-connector
+go get github.com/akosmarton/http-print/...
 ```
