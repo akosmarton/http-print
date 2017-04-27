@@ -92,10 +92,10 @@ func login() error {
 	client := &http.Client{Transport: tr}
 
 	resp, err := client.Post(config.API.URL+"/login", "application/json; charset=utf-8", b)
-
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer resp.Body.Close()
 
 	aresp := protocol.AuthResp{}
 	json.NewDecoder(resp.Body).Decode(&aresp)
@@ -117,10 +117,10 @@ func pull() (int, string) {
 	req, err := http.NewRequest("GET", config.API.URL+"/fetch", nil)
 	req.Header.Add("Authorization", "Bearer "+token)
 	resp, err := client.Do(req)
-
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer resp.Body.Close()
 
 	switch resp.StatusCode {
 	case 200:
