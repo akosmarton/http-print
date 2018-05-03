@@ -49,7 +49,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	db, err = bolt.Open("jobs.db", 0600, nil)
+	db, err = bolt.Open(config.DBPath, 0600, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
