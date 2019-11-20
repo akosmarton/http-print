@@ -35,9 +35,10 @@ func main() {
 	r := mux.NewRouter()
 	r.Methods("OPTIONS").HandlerFunc(optionsHandler)
 	r.Path("/printers/{printer}/jobs/").Methods("GET").HandlerFunc(webRoot)
-	r.Path("/api/printers/{printer}/jobs/").Methods("POST").HandlerFunc(jobPost)
-	r.Path("/api/printers/{printer}/jobs/").Methods("GET").HandlerFunc(jobGet)
-	r.Use(corsMiddleware, authMiddleware)
+	api := r.PathPrefix("/api").Subrouter()
+	api.Path("/printers/{printer}/jobs/").Methods("POST").HandlerFunc(jobPost)
+	api.Path("/printers/{printer}/jobs/").Methods("GET").HandlerFunc(jobGet)
+	api.Use(corsMiddleware, authMiddleware)
 	log.Println("HTTP Print Server started")
 
 	port := os.Getenv("PORT")
