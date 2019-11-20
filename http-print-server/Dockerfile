@@ -1,15 +1,19 @@
-FROM golang:alpine
+FROM golang
 
-RUN apk update && apk add git
-RUN go get github.com/akosmarton/http-print/http-print-server
+WORKDIR /go/src/http-print-server
+COPY . .
+
+RUN go get -d -v ./...
+RUN go install -v ./...
 
 WORKDIR /data
 
 VOLUME /data
 
 ENV APIKEY ""
-ENV DBPATH "jobs.db"
+ENV DBPATH jobs.db
+ENV PORT 8080
 
 EXPOSE 8080
 
-ENTRYPOINT ["/go/bin/http-print-server"]
+CMD ["/go/bin/http-print-server"]
