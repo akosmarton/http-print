@@ -2,75 +2,21 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
-	"sync"
 	"time"
 
-	"github.com/akosmarton/http-print/protocol"
-	"github.com/akosmarton/simplejwt"
-	"github.com/akosmarton/umid"
+	"github.com/gorilla/mux"
 
 	"github.com/boltdb/bolt"
 )
 
-var apiState struct {
-	sync.Mutex
-	LastFetchTime time.Time
-}
-
-func apiRoot(w http.ResponseWriter, r *http.Request) {
-	j := json.NewEncoder(w)
-	j.Encode(&printers)
-}
-
-func apiLogin(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "405 Method Not Allowed ("+r.Method+")", 405)
-		log.Println(r.RemoteAddr, "405 Method Not Allowed ("+r.Method+")")
-		return
-	}
-
-	jdec := json.NewDecoder(r.Body)
-
-	req := protocol.AuthReq{}
-
-	jdec.Decode(&req)
-
-	if req.APIKey == config.APIKey {
-		jenc := json.NewEncoder(w)
-
-		resp := new(protocol.AuthResp)
-
-		f := make(map[string]interface{})
-		f["iat]"] = time.Now().UTC().Unix()
-		f["exp"] = time.Now().Add(time.Duration(config.JWT.Expiry) * time.Second).UTC().Unix()
-		f["nbf"] = time.Now().Add(-600 * time.Second).UTC().Unix()
-
-		t, _ := simplejwt.NewToken(f, []byte(config.JWT.Secret))
-
-		resp.AccessToken = t
-
-		jenc.Encode(&resp)
-		r.Body.Close()
-	} else {
-		http.Error(w, "401 Unauthorized (Invalid credentials)", 401)
-		return
-	}
-}
-
-func apiSubmit(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "405 Method Not Allowed ("+r.Method+")", 405)
-		log.Println(r.RemoteAddr, "405 Method Not Allowed ("+r.Method+")")
-		return
-	}
-
+func jobPost(w http.ResponseWriter, r *http.Request) {
 	var buf bytes.Buffer
+	printer := mux.Vars(r)["printer"]
 	n, _ := buf.ReadFrom(r.Body)
-
-	log.Println(r.RemoteAddr, "Job submitted:", n, "byte(s)")
 
 	j := job{
 		Timestamp:   uint64(time.Now().Unix()),
@@ -80,34 +26,49 @@ func apiSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("jobs"))
+		b := tx.Bucket([]byte(printer))
+		if b == nil {
+			var err error
+			b, err = tx.CreateBucket([]byte(printer))
+			if err != nil {
+				http.Error(w, "500 Internal Server Error", 500)
+				log.Println(err)
+				return err
+			}
+		}
 
 		je, _ := j.GobEncode()
-		err := b.Put(umid.NewAsBytes(), je)
+		k := fmt.Sprintf("%016x", time.Now().UnixNano())
+		err := b.Put([]byte(k), je)
+		if err != nil {
+			return err
+		}
 
-		return err
+		remote := r.RemoteAddr
+		xff := r.Header.Get("X-Forwarded-For")
+		if xff != "" {
+			remote = xff
+		}
+		log.Println(remote, "Job submitted:", n, "byte(s)")
+		return nil
 	})
 }
 
-func apiFetch(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "405 Method Not Allowed ("+r.Method+")", 405)
-		log.Println(r.RemoteAddr, "405 Method Not Allowed ("+r.Method+")")
-		return
-	}
-
-	apiState.Lock()
-	apiState.LastFetchTime = time.Now().UTC()
-	apiState.Unlock()
+func jobGet(w http.ResponseWriter, r *http.Request) {
+	printer := mux.Vars(r)["printer"]
 
 	db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("jobs"))
+		b := tx.Bucket([]byte(printer))
+		if b == nil {
+			http.Error(w, "404 Not Found", 404)
+			return bolt.ErrBucketNotFound
+		}
 
 		k, v := b.Cursor().First()
 
 		if k == nil {
 			http.Error(w, "404 Not Found", 404)
-			return nil
+			return errors.New("Key not found")
 		}
 
 		var j job
@@ -117,7 +78,12 @@ func apiFetch(w http.ResponseWriter, r *http.Request) {
 		w.Write(j.Payload)
 		b.Delete(k)
 
-		log.Println(r.RemoteAddr, "Job fetched:", j.Len, "byte(s)")
+		remote := r.RemoteAddr
+		xff := r.Header.Get("X-Forwarded-For")
+		if xff != "" {
+			remote = xff
+		}
+		log.Println(remote, "Job fetched:", j.Len, "byte(s)")
 
 		return nil
 	})

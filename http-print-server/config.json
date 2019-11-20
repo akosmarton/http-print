@@ -1,9 +1,0 @@
-{
-  "ListenAddress": ":8080",
-  "APIKey": "eeChoosh6Eidoh2Eisaeng0voib4vung",
-  "JWT": {
-    "Secret": "ahb2Pie5ae7auqu6Uj6zaen2adaivees",
-    "Expiry": 3600
-  },
-  "DBPath": "jobs.db"
-}

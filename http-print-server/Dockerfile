@@ -7,6 +7,9 @@ WORKDIR /data
 
 VOLUME /data
 
+ENV APIKEY ""
+ENV DBPATH "jobs.db"
+
 EXPOSE 8080
 
 ENTRYPOINT ["/go/bin/http-print-server"]

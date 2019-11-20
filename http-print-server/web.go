@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/boltdb/bolt"
+	"github.com/gorilla/mux"
 )
 
 const tpl = `<!DOCTYPE html>
@@ -26,7 +27,7 @@ const tpl = `<!DOCTYPE html>
 				</div>
 			</nav>
 		<div class="panel panel-default">
-			<div class="panel-heading">Jobs</div>
+			<div class="panel-heading">Printer {{.Printer}} - Jobs</div>
 				<div class="panel-body">
 					<table class="table">
 						<tr>
@@ -45,9 +46,6 @@ const tpl = `<!DOCTYPE html>
 						{{end}}
 					</table>
 				</div>
-				<div class="panel-footer">
-					Last fetch: {{.LastFetchTime}} {{.LastFetchRemoteAddr}}
-				</div>
 			</div>
 		</div>
 	</body>
@@ -63,8 +61,13 @@ const tpl = `<!DOCTYPE html>
 func webRoot(w http.ResponseWriter, r *http.Request) {
 	t, _ := template.New("tpl").Parse(tpl)
 
+	printer := mux.Vars(r)["printer"]
+
 	db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("jobs"))
+		b := tx.Bucket([]byte(printer))
+		if b == nil {
+			return bolt.ErrBucketNotFound
+		}
 
 		type dataJob struct {
 			ID          string
@@ -74,12 +77,10 @@ func webRoot(w http.ResponseWriter, r *http.Request) {
 		}
 
 		data := struct {
-			Jobs                []dataJob
-			LastFetchTime       time.Time
-			LastFetchRemoteAddr string
+			Printer string
+			Jobs    []dataJob
 		}{
-			LastFetchTime:       apiState.LastFetchTime,
-			LastFetchRemoteAddr: r.RemoteAddr,
+			Printer: printer,
 		}
 
 		b.ForEach(func(k, v []byte) error {

@@ -1,10 +1,7 @@
 package main
 
 import (
-	"encoding/binary"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -12,48 +9,46 @@ import (
 	"syscall"
 
 	"github.com/boltdb/bolt"
-	"github.com/facebookgo/grace/gracehttp"
 	"github.com/gorilla/mux"
 )
 
-type appConfig struct {
-	ListenAddress string
-	APIKey        string
-	JWT           struct {
-		Secret string
-		Expiry int
-	}
-	DBPath string
-}
-
-var config *appConfig
-var printers map[string]interface{}
-
-func itob(v uint64) []byte {
-	b := make([]byte, 8)
-	binary.BigEndian.PutUint64(b, uint64(v))
-	return b
-}
-
-func btoi(b []byte) uint64 {
-	return binary.BigEndian.Uint64(b)
-}
+var apikey string
+var dbpath string
 
 var db *bolt.DB
 
 func main() {
 	var err error
 
-	config, err = loadAppConfig("config.json")
-	if err != nil {
-		log.Fatal(err)
+	apikey = os.Getenv("APIKEY")
+	dbpath = os.Getenv("DBPATH")
+	if dbpath == "" {
+		dbpath = "jobs.db"
 	}
 
-	db, err = bolt.Open(config.DBPath, 0600, nil)
+	db, err = bolt.Open(dbpath, 0600, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
+
+	r := mux.NewRouter()
+	r.Methods("OPTIONS").HandlerFunc(optionsHandler)
+	r.Path("/printers/{printer}/jobs/").Methods("GET").HandlerFunc(webRoot)
+	r.Path("/api/printers/{printer}/jobs/").Methods("POST").HandlerFunc(jobPost)
+	r.Path("/api/printers/{printer}/jobs/").Methods("GET").HandlerFunc(jobGet)
+	r.Use(corsMiddleware, authMiddleware)
+	log.Println("HTTP Print Server started")
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	server := &http.Server{
+		Addr:    fmt.Sprintf(":%s", port),
+		Handler: r,
+	}
 
 	signalChan := make(chan os.Signal)
 	signal.Notify(signalChan, syscall.SIGUSR2)
@@ -62,37 +57,10 @@ func main() {
 		db.Close()
 	}()
 
-	db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte("jobs"))
-		if err != nil {
-			return fmt.Errorf("create bucket: %s", err)
-		}
-		return nil
-	})
-
-	r := mux.NewRouter()
-	r.HandleFunc("/", webRoot)
-
-	s := r.PathPrefix("/api").Subrouter()
-	s.Handle("/login", jsonMiddleware(http.HandlerFunc(apiLogin)))
-	s.Handle("/submit", authMiddleware(jsonMiddleware(http.HandlerFunc(apiSubmit))))
-	s.Handle("/fetch", authMiddleware(http.HandlerFunc(apiFetch)))
-
-	log.Println("HTTP Print Server started")
-	gracehttp.Serve(&http.Server{Addr: config.ListenAddress, Handler: r})
+	if err := server.ListenAndServe(); err != nil {
+		log.Fatal(err.Error())
+	}
 }
 
-func loadAppConfig(filename string) (*appConfig, error) {
-	var c appConfig
-	fc, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
-
-	err = json.Unmarshal(fc, &c)
-	if err != nil {
-		return nil, err
-	}
-
-	return &c, nil
+func optionsHandler(w http.ResponseWriter, r *http.Request) {
 }

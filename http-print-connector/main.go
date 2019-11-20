@@ -2,10 +2,8 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"io"
 	"io/ioutil"
 	"log"
@@ -15,8 +13,6 @@ import (
 	"os/exec"
 	"strings"
 	"time"
-
-	"github.com/akosmarton/http-print/protocol"
 )
 
 type appConfig struct {
@@ -25,6 +21,7 @@ type appConfig struct {
 		Key string
 	}
 	Printer struct {
+		Name        string
 		Type        string
 		Destination string
 	}
@@ -32,7 +29,6 @@ type appConfig struct {
 }
 
 var config *appConfig
-var token string
 
 func main() {
 	var err error
@@ -44,22 +40,17 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err := login(); err != nil {
-		log.Fatal(err)
-	}
-
 	for {
 		i, m := pull()
 		switch i {
 		case 200:
+			continue
 		case 403:
-			if err := login(); err != nil {
-				log.Fatal(err)
-			}
+			log.Fatal("403 Forbidden")
 		case 404:
 			time.Sleep(time.Second * time.Duration(config.PollingInterval))
 		default:
-			log.Fatal(m)
+			log.Println(m)
 		}
 	}
 }
@@ -81,41 +72,13 @@ func loadAppConfig(filename string) (*appConfig, error) {
 	return &c, nil
 }
 
-func login() error {
-	areq := protocol.AuthReq{APIKey: config.API.Key}
-	b := new(bytes.Buffer)
-	json.NewEncoder(b).Encode(areq)
-
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{},
-	}
-	client := &http.Client{Transport: tr}
-
-	resp, err := client.Post(config.API.URL+"/login", "application/json; charset=utf-8", b)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer resp.Body.Close()
-
-	aresp := protocol.AuthResp{}
-	json.NewDecoder(resp.Body).Decode(&aresp)
-
-	if aresp.AccessToken == "" {
-		return errors.New("Authentication failed")
-	}
-
-	token = aresp.AccessToken
-
-	return nil
-}
-
 func pull() (int, string) {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{},
 	}
 	client := &http.Client{Transport: tr}
-	req, err := http.NewRequest("GET", config.API.URL+"/fetch", nil)
-	req.Header.Add("Authorization", "Bearer "+token)
+	req, err := http.NewRequest("GET", config.API.URL+"/printers/"+config.Printer.Name+"/jobs/", nil)
+	req.Header.Add("Authorization", "Bearer "+config.API.Key)
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Fatal(err)
