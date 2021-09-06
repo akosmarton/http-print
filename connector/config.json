@@ -1,6 +1,6 @@
 {
   "API": {
-    "URL": "http://localhost:8080/api",
+    "URL": "https://printer.sharkrf.com/api",
     "Key": "secret"
   },
   "Printer": {
