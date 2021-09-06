@@ -45,12 +45,10 @@ func main() {
 		switch i {
 		case 200:
 			continue
-		case 403:
-			log.Fatal("403 Forbidden")
 		case 404:
 			time.Sleep(time.Second * time.Duration(config.PollingInterval))
 		default:
-			log.Println(m)
+			log.Fatal(m)
 		}
 	}
 }
@@ -78,6 +76,9 @@ func pull() (int, string) {
 	}
 	client := &http.Client{Transport: tr}
 	req, err := http.NewRequest("GET", config.API.URL+"/printers/"+config.Printer.Name+"/jobs/", nil)
+	if err != nil {
+		log.Fatal(err)
+	}
 	req.Header.Add("Authorization", "Bearer "+config.API.Key)
 	resp, err := client.Do(req)
 	if err != nil {
