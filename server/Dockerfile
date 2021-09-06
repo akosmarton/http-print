@@ -1,19 +1,16 @@
-FROM golang
+FROM golang:1.17 as builder
 
-WORKDIR /go/src/http-print-server
+WORKDIR /app
 COPY . .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v
 
-RUN go get -d -v ./...
-RUN go install -v ./...
+FROM alpine
 
-WORKDIR /data
+COPY --from=builder /app/server /app/server
 
 VOLUME /data
-
-ENV APIKEY ""
-ENV DBPATH jobs.db
-ENV PORT 8080
+ENV APIKEY= DBPATH=/data/jobs.db PORT=8080
 
 EXPOSE 8080
 
-CMD ["/go/bin/http-print-server"]
+ENTRYPOINT [ "/app/server" ]
