@@ -9,7 +9,7 @@ FROM alpine
 COPY --from=builder /app/server /app/server
 
 VOLUME /data
-ENV APIKEY= DBPATH=/data/jobs.db PORT=8080
+ENV APIKEY=secret DBPATH=/data/jobs.db PORT=8080
 
 EXPOSE 8080
 

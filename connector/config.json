@@ -1,7 +1,7 @@
 {
   "API": {
     "URL": "http://localhost:8080/api",
-    "Key": "test"
+    "Key": "secret"
   },
   "Printer": {
     "Name": "test",

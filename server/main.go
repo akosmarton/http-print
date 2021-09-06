@@ -1,15 +1,16 @@
 package main
 
 import (
-	"fmt"
-	"log"
+	"context"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/boltdb/bolt"
-	"github.com/gorilla/mux"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
 var apikey string
@@ -20,48 +21,60 @@ var db *bolt.DB
 func main() {
 	var err error
 
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 	apikey = os.Getenv("APIKEY")
+	if apikey == "" {
+		apikey = "secret"
+	}
 	dbpath = os.Getenv("DBPATH")
 	if dbpath == "" {
 		dbpath = "jobs.db"
 	}
 
+	e := echo.New()
+	e.Logger.SetHeader("${time_rfc3339}\t${level} ${short_file}:${line}")
+
 	db, err = bolt.Open(dbpath, 0600, nil)
 	if err != nil {
-		log.Fatal(err)
+		e.Logger.Fatal(err)
 	}
 	defer db.Close()
 
-	r := mux.NewRouter()
-	r.Methods("OPTIONS").HandlerFunc(optionsHandler)
-	r.Path("/printers/{printer}/jobs/").Methods("GET").HandlerFunc(webRoot)
-	api := r.PathPrefix("/api").Subrouter()
-	api.Path("/printers/{printer}/jobs/").Methods("POST").HandlerFunc(jobPost)
-	api.Path("/printers/{printer}/jobs/").Methods("GET").HandlerFunc(jobGet)
-	api.Use(corsMiddleware, authMiddleware)
-	log.Println("HTTP Print Server started")
+	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
+		Skipper: func(c echo.Context) bool {
+			return c.Path() == "/health"
+		},
+		Format: "${time_rfc3339}\tHTTP ${remote_ip} ${host} ${method} ${uri} ${status} ${bytes_out} ${latency_human} ${error}\n",
+	}))
+	e.Use(middleware.Recover())
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
+	if e.Renderer, err = NewTemplate(); err != nil {
+		e.Logger.Fatal(err)
 	}
 
-	server := &http.Server{
-		Addr:    fmt.Sprintf(":%s", port),
-		Handler: r,
-	}
+	e.GET("/health", healthHandler)
+	e.GET("/printers/:printer/jobs/", webHandler)
+	api := e.Group("/api", middleware.KeyAuth(func(key string, c echo.Context) (bool, error) {
+		return key == apikey, nil
+	}))
+	api.GET("/printers/:printer/jobs/", getHandler)
+	api.POST("/printers/:printer/jobs/", postHandler)
 
-	signalChan := make(chan os.Signal)
-	signal.Notify(signalChan, syscall.SIGUSR2)
 	go func() {
-		<-signalChan
-		db.Close()
+		if err := e.Start(":" + port); err != nil && err != http.ErrServerClosed {
+			e.Logger.Fatal(err)
+		}
 	}()
 
-	if err := server.ListenAndServe(); err != nil {
-		log.Fatal(err.Error())
+	q := make(chan os.Signal, 1)
+	signal.Notify(q, os.Interrupt, syscall.SIGTERM)
+	<-q
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := e.Shutdown(ctx); err != nil {
+		e.Logger.Fatal(err)
 	}
-}
-
-func optionsHandler(w http.ResponseWriter, r *http.Request) {
 }
