@@ -94,7 +94,7 @@ func pull() (int, string) {
 
 	switch config.Printer.Type {
 	case "file":
-		f, err := os.OpenFile(config.Printer.Destination, os.O_WRONLY|os.O_CREATE, 0666)
+		f, err := os.OpenFile(config.Printer.Destination, os.O_WRONLY, 0)
 		if err != nil {
 			log.Fatal(err)
 		}
