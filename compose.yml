@@ -3,6 +3,8 @@ version: '3'
 services:
   app:
     image: docker.io/makos/http-print-server
+    build:
+      context: .
     environment:
       - PRINTERS=
       - PORT=8080

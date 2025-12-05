@@ -1,9 +1,0 @@
-version: '3'
-
-services:
-  app:
-    image: docker.io/makos/http-print-connector
-    environment:
-      - API_URL=
-      - API_KEY=
-      - PRINTER_URL=
