@@ -1,4 +1,4 @@
-module github.com/akosmarton/server
+module github.com/akosmarton/http-print-server
 
 go 1.25.4
 
