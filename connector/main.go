@@ -2,123 +2,91 @@ package main
 
 import (
 	"bufio"
-	"crypto/tls"
-	"encoding/json"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
-	"net/http"
+	"net/url"
 	"os"
-	"os/exec"
-	"strings"
 	"time"
+
+	"resty.dev/v3"
 )
 
-type appConfig struct {
-	API struct {
-		URL string
-		Key string
-	}
-	Printer struct {
-		Name        string
-		Type        string
-		Destination string
-	}
-	PollingInterval int
-}
-
-var config *appConfig
-
 func main() {
-	var err error
-
 	log.Println("HTTP Print Connector started")
 
-	config, err = loadAppConfig("config.json")
-	if err != nil {
-		log.Fatal(err)
+	apiUrl := os.Getenv("API_URL")
+	if apiUrl == "" {
+		log.Fatal("API_URL environment variable is not set")
 	}
+
+	apiKey := os.Getenv("API_KEY")
+	if apiKey == "" {
+		log.Fatal("API_KEY environment variable is not set")
+	}
+
+	printer_url := os.Getenv("PRINTER_URL")
+	if printer_url == "" {
+		log.Fatal("PRINTER_URL environment variable is not set")
+	}
+
+	purl, err := url.ParseRequestURI(printer_url)
+	if err != nil {
+		log.Fatal("Invalid API_URL:", err)
+	}
+
+	if purl.Scheme != "file" && purl.Scheme != "tcp" {
+		log.Fatal("Unsupported PRINTER_URL scheme:", purl.Scheme)
+	}
+
+	client := resty.New()
+	defer client.Close()
+	client.SetAuthToken(apiKey)
 
 	for {
-		i, m := pull()
-		switch i {
-		case 200:
+		log.Println("Waiting for print job...")
+		res, err := client.R().Get(apiUrl)
+		if err != nil {
+			log.Println("Error:", err)
+			time.Sleep(time.Second * 5)
 			continue
-		case 404:
-			time.Sleep(time.Second * time.Duration(config.PollingInterval))
-		default:
-			log.Fatal(m)
+		}
+		if res.IsSuccess() {
+			if err := print(purl, res.Body); err != nil {
+				log.Println("Print error:", err)
+			} else {
+				log.Println("Print successful")
+			}
+		} else {
+			log.Println("Status:", res.Status())
+			time.Sleep(time.Second * 5)
+			continue
 		}
 	}
 }
 
-func loadAppConfig(filename string) (*appConfig, error) {
-	var c appConfig
-	fc, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
-
-	err = json.Unmarshal(fc, &c)
-	if err != nil {
-		return nil, err
-	}
-
-	c.API.URL = strings.TrimSuffix(c.API.URL, "/")
-
-	return &c, nil
-}
-
-func pull() (int, string) {
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{},
-	}
-	client := &http.Client{Transport: tr}
-	req, err := http.NewRequest("GET", config.API.URL+"/printers/"+config.Printer.Name+"/jobs/", nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-	req.Header.Add("Authorization", "Bearer "+config.API.Key)
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer resp.Body.Close()
-
-	switch resp.StatusCode {
-	case 200:
-	default:
-		return resp.StatusCode, resp.Status
-	}
-
-	switch config.Printer.Type {
+func print(purl *url.URL, payload io.ReadCloser) error {
+	switch purl.Scheme {
 	case "file":
-		f, err := os.OpenFile(config.Printer.Destination, os.O_WRONLY, 0)
+		f, err := os.OpenFile(purl.Path, os.O_WRONLY, 0)
 		if err != nil {
 			log.Fatal(err)
 		}
+		defer f.Close()
 		w := bufio.NewWriter(f)
-		written, err := io.Copy(w, resp.Body)
-		if err != nil {
-			f.Close()
-			log.Fatal(err)
+		defer w.Flush()
+		if _, err := io.Copy(w, payload); err != nil {
+			return err
 		}
-		w.Flush()
-		f.Close()
-		log.Println("Written:", written, "byte(s)")
-	case "pipe":
-		cmd := exec.Command(config.Printer.Destination)
-		pipe, _ := cmd.StdinPipe()
-		cmd.Start()
-		io.Copy(pipe, resp.Body)
-		pipe.Close()
-		cmd.Wait()
 	case "tcp":
-		conn, _ := net.Dial("tcp", config.Printer.Destination)
-		io.Copy(conn, resp.Body)
-		conn.Close()
+		conn, err := net.Dial("tcp", purl.Host)
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+		if _, err := io.Copy(conn, payload); err != nil {
+			return err
+		}
 	}
-
-	return resp.StatusCode, resp.Status
+	return nil
 }

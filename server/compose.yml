@@ -4,11 +4,9 @@ services:
   app:
     image: docker.io/makos/http-print-server
     environment:
+      - PRINTERS=
       - PORT=8080
+      - API_KEY=
     ports:
       - 8080:8080
-    volumes:
-      - data:/data
-
-volumes:
-  data:
+    

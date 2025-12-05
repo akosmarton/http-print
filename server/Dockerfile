@@ -1,4 +1,4 @@
-FROM golang:1.25.2 as builder
+FROM golang:1.25.4 as builder
 
 WORKDIR /app
 COPY . .
@@ -9,7 +9,7 @@ FROM alpine
 COPY --from=builder /app/server /app/server
 
 VOLUME /data
-ENV APIKEY=secret DBPATH=/data/jobs.db PORT=8080
+ENV PRINTERS= APIKEY= PORT=8080
 
 EXPOSE 8080
 

@@ -2,66 +2,58 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
-	"github.com/boltdb/bolt"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
 
-var apikey string
-var dbpath string
-
-var db *bolt.DB
+var jobQueue *JobQueue
 
 func main() {
-	var err error
+	jobQueue = NewJobQueue(100)
 
+	printers := os.Getenv("PRINTERS")
+	if printers == "" {
+		fmt.Println("PRINTERS environment variable is not set. Exiting.")
+		os.Exit(1)
+	}
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
-	apikey = os.Getenv("APIKEY")
-	if apikey == "" {
-		apikey = "secret"
+	apiKey := os.Getenv("API_KEY")
+	if apiKey == "" {
+		fmt.Println("API_KEY environment variable is not set. Exiting.")
+		os.Exit(1)
 	}
-	dbpath = os.Getenv("DBPATH")
-	if dbpath == "" {
-		dbpath = "jobs.db"
+
+	for printer := range strings.SplitSeq(printers, " ") {
+		jobQueue.Init(printer)
+		fmt.Printf("Initialized printer queue: %s\n", printer)
 	}
 
 	e := echo.New()
-	e.Logger.SetHeader("${time_rfc3339}\t${level} ${short_file}:${line}")
-
-	db, err = bolt.Open(dbpath, 0600, nil)
-	if err != nil {
-		e.Logger.Fatal(err)
-	}
-	defer db.Close()
-
 	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
 		Skipper: func(c echo.Context) bool {
 			return c.Path() == "/health"
 		},
-		Format: "${time_rfc3339}\tHTTP ${remote_ip} ${host} ${method} ${uri} ${status} ${bytes_out} ${latency_human} ${error}\n",
 	}))
 	e.Use(middleware.Recover())
 
-	if e.Renderer, err = NewTemplate(); err != nil {
-		e.Logger.Fatal(err)
-	}
-
 	e.GET("/health", healthHandler)
-	e.GET("/printers/:printer/jobs/", webHandler)
 	api := e.Group("/api", middleware.KeyAuth(func(key string, c echo.Context) (bool, error) {
-		return key == apikey, nil
+		return key == apiKey, nil
 	}))
-	api.GET("/printers/:printer/jobs/", getHandler)
-	api.POST("/printers/:printer/jobs/", postHandler)
+	api.GET("/printers/:printer", getJob)
+	api.POST("/printers/:printer", postJob)
+	api.DELETE("/printers/:printer", deleteJobs)
 
 	go func() {
 		if err := e.Start(":" + port); err != nil && err != http.ErrServerClosed {
