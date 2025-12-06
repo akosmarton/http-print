@@ -8,7 +8,7 @@ FROM alpine
 
 COPY --from=builder /app/http-print-server /app/http-print-server
 
-ENV PRINTERS= APIKEY= PORT=8080
+ENV PRINTERS= API_KEY= PORT=8080
 
 EXPOSE 8080
 
