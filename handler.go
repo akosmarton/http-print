@@ -33,12 +33,13 @@ func postJob(c echo.Context) error {
 		return fmt.Errorf("Job queue full")
 	}
 
-	return c.NoContent(http.StatusAccepted)
+	return c.NoContent(http.StatusCreated)
 }
 
 func getJob(c echo.Context) error {
 	c.Response().Header().Set("Cache-Control", "no-cache")
 	c.Response().Header().Set("Connection", "keep-alive")
+	c.Response().Flush()
 
 	jobs := jobQueue.Get(c.Param("printer"))
 	if jobs == nil {
