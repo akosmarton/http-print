@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -21,8 +21,7 @@ func main() {
 
 	printers := os.Getenv("PRINTERS")
 	if printers == "" {
-		fmt.Println("PRINTERS environment variable is not set. Exiting.")
-		os.Exit(1)
+		log.Fatal("PRINTERS environment variable is not set. Exiting.")
 	}
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -30,13 +29,12 @@ func main() {
 	}
 	apiKey := os.Getenv("API_KEY")
 	if apiKey == "" {
-		fmt.Println("API_KEY environment variable is not set. Exiting.")
-		os.Exit(1)
+		log.Fatal("API_KEY environment variable is not set. Exiting.")
 	}
 
 	for printer := range strings.SplitSeq(printers, " ") {
 		jobQueue.Init(printer)
-		fmt.Printf("Initialized printer queue: %s\n", printer)
+		log.Printf("Initialized printer queue: %s\n", printer)
 	}
 
 	e := echo.New()
