@@ -6,9 +6,9 @@ services:
     build:
       context: .
     environment:
-      - PRINTERS=
+      - PRINTERS=test
       - PORT=8080
-      - API_KEY=
+      - API_KEY=secret
     ports:
       - 8080:8080
     

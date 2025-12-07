@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,16 +12,18 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"golang.org/x/time/rate"
 )
 
 var jobQueue *JobQueue
 
 func main() {
+	slog.Info("http-print-server starting...")
 	jobQueue = NewJobQueue(100)
-
 	printers := os.Getenv("PRINTERS")
 	if printers == "" {
-		log.Fatal("PRINTERS environment variable is not set. Exiting.")
+		slog.Error("PRINTERS environment variable is not set. Exiting.")
+		os.Exit(1)
 	}
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -29,21 +31,49 @@ func main() {
 	}
 	apiKey := os.Getenv("API_KEY")
 	if apiKey == "" {
-		log.Fatal("API_KEY environment variable is not set. Exiting.")
+		slog.Error("API_KEY environment variable is not set. Exiting.")
+		os.Exit(1)
 	}
 
 	for printer := range strings.SplitSeq(printers, " ") {
 		jobQueue.Init(printer)
-		log.Printf("Initialized printer queue: %s\n", printer)
+		slog.Info("Queue initialized", "printer", printer)
 	}
 
 	e := echo.New()
-	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
+	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
 		Skipper: func(c echo.Context) bool {
 			return c.Path() == "/health"
 		},
+		LogStatus:   true,
+		LogURI:      true,
+		LogError:    true,
+		LogMethod:   true,
+		LogRemoteIP: true,
+		LogLatency:  true,
+		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
+			if v.Error == nil {
+				slog.LogAttrs(context.Background(), slog.LevelInfo, "request",
+					slog.String("method", v.Method),
+					slog.String("uri", v.URI),
+					slog.Int("status", v.Status),
+					slog.Duration("latency", v.Latency),
+					slog.String("remote_ip", v.RemoteIP),
+				)
+			} else {
+				slog.LogAttrs(context.Background(), slog.LevelError, "request",
+					slog.String("method", v.Method),
+					slog.String("uri", v.URI),
+					slog.Int("status", v.Status),
+					slog.Duration("latency", v.Latency),
+					slog.String("remote_ip", v.RemoteIP),
+					slog.Any("err", v.Error),
+				)
+			}
+			return nil
+		},
 	}))
-	e.Use(middleware.Recover())
+	e.Use(middleware.Recover(), middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(rate.Limit(20))))
 
 	e.GET("/health", healthHandler)
 	api := e.Group("/api", middleware.KeyAuth(func(key string, c echo.Context) (bool, error) {
@@ -55,16 +85,19 @@ func main() {
 
 	go func() {
 		if err := e.Start(":" + port); err != nil && err != http.ErrServerClosed {
-			e.Logger.Fatal(err)
+			slog.Error("Starting server", slog.Any("err", err))
+			os.Exit(1)
 		}
 	}()
 
 	q := make(chan os.Signal, 1)
 	signal.Notify(q, os.Interrupt, syscall.SIGTERM)
 	<-q
+	slog.Info("Shutting down server...")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := e.Shutdown(ctx); err != nil {
-		e.Logger.Fatal(err)
+		slog.Error("Shutting down server", slog.Any("err", err))
+		os.Exit(1)
 	}
 }
