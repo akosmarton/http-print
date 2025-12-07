@@ -2,7 +2,7 @@ FROM golang:1.25.4 as builder
 
 WORKDIR /app
 COPY . .
-RUN --mount=type=cache,target=$HOME/.cache/go-build CGO_ENABLED=0 go build -v
+RUN --mount=type=cache,target=$HOME/go/pkg/mod CGO_ENABLED=0 go build -v
 
 FROM alpine
 
