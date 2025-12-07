@@ -52,7 +52,7 @@ func main() {
 		LogRemoteIP: true,
 		LogLatency:  true,
 		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
-			if v.Status < 400 {
+			if v.Status < 500 {
 				slog.LogAttrs(context.Background(), slog.LevelInfo, "request",
 					slog.String("method", v.Method),
 					slog.String("uri", v.URI),
